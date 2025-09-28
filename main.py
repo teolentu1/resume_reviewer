@@ -1,8 +1,11 @@
-# Install Required Library: pip install pdfplumber
-
+import numpy as np
+from huggingface_hub import InferenceClient
+from numpy import dot
+from numpy.linalg import norm
 import pdfplumber
+import os
 
-resume_path = "resume.pdf"
+hf_api_key = os.getenv("HF_TOKEN")
 
 def load_resume(filepath):
     """
@@ -22,12 +25,44 @@ def load_resume(filepath):
     
     return text.strip()
 
+def compute_embeddings(texts, hf_client):
+    """
+    Generates embeddings for a list of texts using a sentence-transformer model.
+    """
+    
+    embeddings = hf_client.feature_extraction(
+        texts,
+        model="sentence-transformers/all-MiniLM-L6-v2"
+    )
+
+    return  np.array(embeddings , dtype="float32")
+
+def compute_similarity(resume_text, job_desc, hf_client):
+    """
+    Computes cosine similarity between resume and job description embeddings.
+    """
+
+    # Compute vector embeddings for the resume and job description using the Hugging Face client
+    v1, v2 = compute_embeddings([resume_text, job_desc], hf_client)
+
+    similarity = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+    return similarity
+
 if __name__ == "__main__":
 
-    # Call the function to extract resume text
-    resume_text = load_resume(resume_path)
+    hf_client = InferenceClient(token=hf_api_key)
 
-    # Print the extracted resume content
-    print("\nResume Content:\n", resume_text)
+    # Load resume from file
+    resume_text = load_resume("resume.pdf")
+
+    # Load job description from file
+    with open("JD.txt", "r") as f:
+        job_desc = f.read().strip()
+
+    # Compute and print similarity score
+    score = compute_similarity(resume_text, job_desc, hf_client)
+    print(f"\nResume-Job Match Score: {score:.2f}")
+
 
 
