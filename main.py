@@ -1,11 +1,14 @@
+import os
 import numpy as np
-from huggingface_hub import InferenceClient
+import pdfplumber
 from numpy import dot
 from numpy.linalg import norm
-import pdfplumber
-import os
+from huggingface_hub import InferenceClient
+from groq import Groq
+# pip install pdfplumber huggingface-hub groq
 
 hf_api_key = os.getenv("HF_TOKEN")
+groq_api_key = os.getenv("GROQ_TOKEN")
 
 def load_resume(filepath):
     """
@@ -49,20 +52,57 @@ def compute_similarity(resume_text, job_desc, hf_client):
 
     return similarity
 
+def generate_review(groq_client, resume_text, job_desc, score):
+    """
+    Generate structured resume feedback using Groq LLM.
+    """
+
+    prompt = f"""
+    You are an expert career coach and ATS optimization concultant
+    Job Description:
+    {job_desc}
+
+    Resume:
+    {resume_text}
+
+    Resume-Job Match Score: {score:.2f}
+
+    Provide a detailed review with:
+    1. Strengths of this resume for the given job.
+    2. Weaknesses or gaps compared to the job description.
+    3. Overall verdict on hiring potential.
+    """
+
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.4
+    )
+
+    return response.choices[0].message.content.strip()
+
+
 if __name__ == "__main__":
-
+    
+    # Initialize clients
     hf_client = InferenceClient(token=hf_api_key)
+    groq_client = Groq(api_key=groq_api_key)
 
-    # Load resume from file
+    # Load resume and job description
     resume_text = load_resume("resume.pdf")
-
-    # Load job description from file
     with open("JD.txt", "r") as f:
         job_desc = f.read().strip()
 
-    # Compute and print similarity score
+    # Compute Resume–Job similarity
+    print("\nEvaluating resume vs job description...")
     score = compute_similarity(resume_text, job_desc, hf_client)
-    print(f"\nResume-Job Match Score: {score:.2f}")
+    print(f"Resume-Job Match Score: {score:.2f}")
+
+    # Generate structured review
+    print("\nGenerating resume review...")
+    review = generate_review(groq_client, resume_text, job_desc, score)
+    print("\nResume Review Report:\n")
+    print(review)
 
 
 
